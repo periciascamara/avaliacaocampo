@@ -1,0 +1,555 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>KriterIO - Protocolo de Avaliação Pericial v2.2</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f3f4f6; }
+        .tab-active { border-bottom: 2px solid #2563eb; color: #2563eb; font-weight: bold; }
+        .hidden-section { display: none; }
+        .lego-part { cursor: pointer; transition: all 0.2s ease; fill: #e5e7eb; stroke: #4b5563; stroke-width: 1.5; }
+        .lego-part:hover { filter: brightness(0.95); stroke: #2563eb; }
+        .system-part { cursor: pointer; transition: all 0.2s ease; fill: #e0f2fe; stroke: #0ea5e9; stroke-width: 1.5; opacity: 0.8; }
+        .system-part:hover { fill: #0284c7; opacity: 1; }
+        #custom-tooltip { position: fixed; background: rgba(0, 0, 0, 0.8); color: white; padding: 5px 10px; border-radius: 4px; font-size: 12px; pointer-events: none; z-index: 100; display: none; white-space: nowrap; }
+        .alert-badge { background-color: #fee2e2; color: #991b1b; border: 1px solid #ef4444; padding: 8px 12px; border-radius: 4px; font-weight: bold; display: inline-block; margin-top: 5px; font-size: 0.9em; }
+        .modal-animate { animation: fadeIn 0.3s ease-out; }
+        @keyframes fadeIn { from { opacity: 0; transform: scale(0.95); } to { opacity: 1; transform: scale(1); } }
+        #toast { visibility: hidden; min-width: 250px; background-color: #333; color: #fff; text-align: center; border-radius: 4px; padding: 12px; position: fixed; z-index: 999; left: 50%; bottom: 30px; transform: translateX(-50%); font-size: 14px; opacity: 0; transition: opacity 0.5s, bottom 0.5s; }
+        #toast.show { visibility: visible; opacity: 1; bottom: 50px; }
+        input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; height: 20px; width: 20px; border-radius: 50%; background: #2563eb; cursor: pointer; margin-top: -8px; }
+        input[type=range]::-webkit-slider-runnable-track { width: 100%; height: 4px; cursor: pointer; background: #d1d5db; border-radius: 2px; }
+        @media print { .no-print { display: none !important; } .print-only { display: block !important; } body { background-color: white; } .card { box-shadow: none; border: 1px solid #ddd; } }
+    </style>
+</head>
+<body class="text-gray-800 relative">
+
+    <div id="custom-tooltip"></div>
+    <div id="toast"><i class="fas fa-check-circle mr-2"></i>Salvo!</div>
+
+    <header class="bg-white shadow-md sticky top-0 z-40 no-print">
+        <div class="container mx-auto px-4 py-3 flex justify-between items-center">
+            <div class="flex items-center gap-2">
+                <i class="fas fa-child text-blue-600 text-2xl"></i>
+                <h1 class="text-xl font-bold text-gray-800 hidden md:block">KriterIO <span class="text-sm font-normal text-gray-500">| Avaliação Pericial <span class="text-xs bg-blue-100 text-blue-800 px-1 rounded">v2.2</span></span></h1>
+            </div>
+            <div class="flex gap-2 overflow-x-auto items-center">
+                <button onclick="createNewSession()" class="bg-green-600 text-white px-3 py-2 rounded hover:bg-green-700 text-sm font-bold shadow-sm mr-1 whitespace-nowrap"><i class="fas fa-plus-circle mr-1"></i> Nova</button>
+                <button onclick="openStorageModal()" class="bg-gray-100 text-gray-700 px-3 py-2 rounded hover:bg-gray-200 text-sm font-bold border border-gray-300 mr-2 whitespace-nowrap"><i class="fas fa-folder-open mr-1"></i> Arquivos</button>
+                <button onclick="changeTab('identificacao')" class="nav-btn tab-active px-3 py-2 text-sm whitespace-nowrap" id="btn-identificacao">Identificação</button>
+                <button onclick="changeTab('waddell')" class="nav-btn px-3 py-2 text-sm text-gray-600 hover:text-blue-600 whitespace-nowrap" id="btn-waddell">Waddell</button>
+                <button onclick="changeTab('protocolos')" class="nav-btn px-3 py-2 text-sm text-gray-600 hover:text-blue-600 whitespace-nowrap" id="btn-protocolos">Exames</button>
+                <button onclick="changeTab('midia')" class="nav-btn px-3 py-2 text-sm text-gray-600 hover:text-blue-600 whitespace-nowrap" id="btn-midia">Mídia</button>
+                <button onclick="generateReport()" class="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 text-sm font-bold shadow whitespace-nowrap"><i class="fas fa-file-alt"></i> Laudo</button>
+            </div>
+        </div>
+    </header>
+
+    <main class="container mx-auto px-4 py-6 max-w-5xl">
+        <!-- TAB: IDENTIFICAÇÃO -->
+        <section id="tab-identificacao" class="tab-content">
+            <div class="bg-white rounded-lg shadow p-6 mb-6">
+                <div class="flex justify-between items-center border-b pb-2 mb-4">
+                    <h2 class="text-lg font-bold text-gray-700"><i class="fas fa-user-edit mr-2"></i>Dados da Perícia</h2>
+                    <span id="last-saved-time" class="text-xs text-gray-400 italic"></span>
+                </div>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                    <div><label class="block text-sm font-medium text-gray-700">Nome do Periciado</label><input type="text" id="nomePericiado" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 border p-2 save-trigger"></div>
+                    <div><label class="block text-sm font-medium text-gray-700">Data da Avaliação</label><input type="date" id="dataAvaliacao" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 border p-2 save-trigger"></div>
+                    <div><label class="block text-sm font-medium text-gray-700">Médico Perito</label><input type="text" id="medicoPerito" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 border p-2 save-trigger"></div>
+                    <div><label class="block text-sm font-medium text-gray-700">Assistente(s) Técnico(s)</label><input type="text" id="assistentesTecnicos" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 border p-2 save-trigger"></div>
+                </div>
+                <div class="mb-4">
+                    <label class="block text-sm font-medium text-gray-700">Resumo da Anamnese</label>
+                    <textarea id="resumoAnamnese" rows="4" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 border p-2 save-trigger" placeholder="Descreva brevemente as razões da perícia..."></textarea>
+                </div>
+                <div class="bg-blue-50 p-4 rounded border border-blue-100">
+                    <h3 class="text-sm font-bold text-gray-700 mb-2">Instrumentos e Metodologia:</h3>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                        <div class="flex items-center gap-2"><input type="checkbox" id="checkFita" class="h-4 w-4 rounded save-trigger"><label for="checkFita" class="text-sm text-gray-700">Fita Métrica</label></div>
+                        <div class="flex items-center gap-2"><input type="checkbox" id="checkGoniometro" class="h-4 w-4 rounded save-trigger"><label for="checkGoniometro" class="text-sm text-gray-700">Goniômetro</label></div>
+                        <div class="flex items-center gap-2"><input type="checkbox" id="checkFotos" class="h-4 w-4 rounded save-trigger"><label for="checkFotos" class="text-sm text-gray-700">Fotografias</label></div>
+                        <div class="flex items-center gap-2"><input type="checkbox" id="checkGravacao" class="h-4 w-4 rounded save-trigger"><label for="checkGravacao" class="text-sm text-gray-700">Gravação de Entrevista</label></div>
+                    </div>
+                    <div class="mt-4 pt-3 border-t border-blue-200">
+                        <div class="flex items-start gap-2"><input type="checkbox" id="checkConsentimento" class="h-5 w-5 text-green-600 rounded mt-0.5 save-trigger"><label for="checkConsentimento" class="text-sm text-gray-800 font-bold">O periciado foi informado e concordou com a gravação.</label></div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- TAB: WADDELL -->
+        <section id="tab-waddell" class="tab-content hidden-section">
+            <div class="bg-white rounded-lg shadow p-6 mb-6 relative">
+                <h2 class="text-lg font-bold border-b pb-2 mb-4 text-gray-700"><i class="fas fa-exclamation-triangle mr-2"></i>Sinais de Waddell</h2>
+                <div class="bg-yellow-50 border-l-4 border-yellow-400 p-4 mb-4"><p class="text-sm text-yellow-700"><strong>Regra de Ouro:</strong> A presença de 3 ou mais sinais sugere forte componente não-orgânico.</p></div>
+                <div class="space-y-4" id="waddell-container">
+                    <!-- Gerado via JS -->
+                </div>
+                <div id="waddell-alert-box" class="hidden mt-6 bg-red-100 border border-red-400 text-red-800 px-4 py-3 rounded relative"><strong class="font-bold">Alerta:</strong> Etiqueta "COMPORTAMENTO NÃO-ORGÂNICO" ativada.</div>
+            </div>
+        </section>
+
+        <!-- TAB: PROTOCOLOS -->
+        <section id="tab-protocolos" class="tab-content hidden-section">
+            <div class="bg-white rounded-lg shadow p-6 mb-6">
+                <h2 class="text-lg font-bold border-b pb-2 mb-4 text-gray-700"><i class="fas fa-list-ul mr-2"></i>Seleção de Protocolos e Exames</h2>
+                
+                <div class="grid grid-cols-2 md:grid-cols-7 gap-3 mb-6">
+                    <div class="p-2 border rounded hover:shadow-md cursor-pointer transition bg-blue-50 text-center" onclick="toggleOrthopedicSelector()">
+                        <i class="fas fa-bone text-blue-500 text-2xl mb-1"></i><br><span class="text-xs font-bold text-gray-700">Ortopédico</span>
+                    </div>
+                    <div class="p-2 border rounded hover:shadow-md cursor-pointer transition text-center" onclick="toggleSpecialProtocol('mental')">
+                         <i class="fas fa-brain text-purple-500 text-2xl mb-1"></i><br><span class="text-xs font-bold text-gray-700">Saúde Mental</span>
+                    </div>
+                    <div class="p-2 border rounded hover:shadow-md cursor-pointer transition text-center" onclick="toggleSpecialProtocol('dor')">
+                         <i class="fas fa-fire-alt text-red-500 text-2xl mb-1"></i><br><span class="text-xs font-bold text-gray-700">Dor (EVA)</span>
+                    </div>
+                    <div class="p-2 border rounded hover:shadow-md cursor-pointer transition text-center" onclick="toggleSpecialProtocol('cardio')">
+                         <i class="fas fa-heartbeat text-pink-600 text-2xl mb-1"></i><br><span class="text-xs font-bold text-gray-700">Cardiologia</span>
+                    </div>
+                    <div class="p-2 border rounded hover:shadow-md cursor-pointer transition text-center" onclick="toggleSpecialProtocol('ergonomia')">
+                         <i class="fas fa-chair text-teal-600 text-2xl mb-1"></i><br><span class="text-xs font-bold text-gray-700">Ergonomia</span>
+                    </div>
+                    <div class="p-2 border rounded hover:shadow-md cursor-pointer transition text-center" onclick="toggleSpecialProtocol('incapacidade')">
+                         <i class="fas fa-wheelchair text-orange-600 text-2xl mb-1"></i><br><span class="text-xs font-bold text-gray-700">Incapacidade</span>
+                    </div>
+                    <div class="p-2 border rounded hover:shadow-md cursor-pointer transition text-center" onclick="toggleSpecialProtocol('dano')">
+                         <i class="fas fa-user-injured text-red-700 text-2xl mb-1"></i><br><span class="text-xs font-bold text-gray-700">Dano Corporal</span>
+                    </div>
+                </div>
+
+                <div id="painel-principal" class="border-t pt-4">
+                    <div class="flex flex-col md:flex-row gap-6 items-start">
+                        <!-- Coluna Esquerda: Boneco Lego (Ortopédico) -->
+                        <div id="lego-selector-area" class="w-full md:w-1/2 flex flex-col gap-4 hidden">
+                            <h4 class="font-bold text-blue-800 border-b pb-1">Exame Ortopédico (Segmentar)</h4>
+                            <div class="flex items-center gap-3 bg-white p-3 rounded shadow-sm border justify-between">
+                                <div class="flex items-center gap-2"><label class="text-sm font-bold text-gray-700">Cor:</label><input type="color" id="bodyColorPicker" value="#3b82f6" class="w-8 h-8 rounded cursor-pointer border-0 p-0 shadow-sm" onchange="updateGlobalColor(this.value)"></div>
+                                <div class="text-xs text-gray-500 text-right">Selecione no boneco ou na lista.</div>
+                            </div>
+                            <div class="flex gap-2">
+                                <div class="bg-gray-50 p-2 rounded border flex justify-center items-center flex-grow">
+                                    <svg id="lego-man-svg" width="180" height="320" viewBox="0 0 300 500" xmlns="http://www.w3.org/2000/svg" class="drop-shadow-sm">
+                                        <g id="cervical" class="lego-part" onclick="toggleBodyPart('cervical')" onmouseenter="showTooltip(event, 'Cervical')" onmouseleave="hideTooltip()"><rect x="110" y="10" width="80" height="70" rx="10" /><rect x="125" y="80" width="50" height="30" /></g>
+                                        <rect x="75" y="110" width="150" height="100" rx="5" fill="#e5e7eb" stroke="#4b5563" stroke-width="1.5" pointer-events="none" />
+                                        <rect id="lombar" class="lego-part" onclick="toggleBodyPart('lombar')" onmouseenter="showTooltip(event, 'Lombar')" onmouseleave="hideTooltip()" x="75" y="210" width="150" height="60" rx="5" />
+                                        <path d="M 75 270 L 225 270 L 215 320 L 85 320 Z" fill="#e5e7eb" stroke="#4b5563" stroke-width="1.5" pointer-events="none" />
+                                        <g id="ombro-e" class="lego-part" onclick="toggleBodyPart('ombro-e')" onmouseenter="showTooltip(event, 'Ombro Esq')" onmouseleave="hideTooltip()"><circle cx="60" cy="135" r="25" /><rect x="35" y="135" width="50" height="100" rx="10" transform="rotate(10 60,135)" /></g>
+                                        <g id="punho-e" class="lego-part" onclick="toggleBodyPart('punho-e')" onmouseenter="showTooltip(event, 'Punho Esq')" onmouseleave="hideTooltip()"><rect x="25" y="235" width="40" height="30" rx="5" transform="rotate(10 60,135)"/></g>
+                                        <g id="mao-e" class="lego-part" onclick="toggleBodyPart('mao-e')" onmouseenter="showTooltip(event, 'Mão Esq')" onmouseleave="hideTooltip()"><path d="M 20 270 Q 5 290 20 310 Q 40 320 60 310 Q 75 290 60 270 Z" transform="rotate(10 60,135)"/></g>
+                                        <g id="ombro-d" class="lego-part" onclick="toggleBodyPart('ombro-d')" onmouseenter="showTooltip(event, 'Ombro Dir')" onmouseleave="hideTooltip()"><circle cx="240" cy="135" r="25" /><rect x="215" y="135" width="50" height="100" rx="10" transform="rotate(-10 240,135)" /></g>
+                                        <g id="punho-d" class="lego-part" onclick="toggleBodyPart('punho-d')" onmouseenter="showTooltip(event, 'Punho Dir')" onmouseleave="hideTooltip()"><rect x="235" y="235" width="40" height="30" rx="5" transform="rotate(-10 240,135)"/></g>
+                                        <g id="mao-d" class="lego-part" onclick="toggleBodyPart('mao-d')" onmouseenter="showTooltip(event, 'Mão Dir')" onmouseleave="hideTooltip()"><path d="M 240 270 Q 225 290 240 310 Q 260 320 280 310 Q 295 290 280 270 Z" transform="rotate(-10 240,135)"/></g>
+                                        <g id="joelho-e" class="lego-part" onclick="toggleBodyPart('joelho-e')" onmouseenter="showTooltip(event, 'Joelho Esq')" onmouseleave="hideTooltip()"><rect x="85" y="320" width="60" height="150" rx="10" /><line x1="85" y1="395" x2="145" y2="395" stroke="#4b5563" stroke-width="2" stroke-dasharray="5,3"/></g>
+                                        <g id="tornozelo-pe-e" class="lego-part" onclick="toggleBodyPart('tornozelo-pe-e')" onmouseenter="showTooltip(event, 'Pé/Tornozelo Esq')" onmouseleave="hideTooltip()"><rect x="80" y="470" width="70" height="30" rx="5" /></g>
+                                        <g id="joelho-d" class="lego-part" onclick="toggleBodyPart('joelho-d')" onmouseenter="showTooltip(event, 'Joelho Dir')" onmouseleave="hideTooltip()"><rect x="155" y="320" width="60" height="150" rx="10" /><line x1="155" y1="395" x2="215" y2="395" stroke="#4b5563" stroke-width="2" stroke-dasharray="5,3"/></g>
+                                        <g id="tornozelo-pe-d" class="lego-part" onclick="toggleBodyPart('tornozelo-pe-d')" onmouseenter="showTooltip(event, 'Pé/Tornozelo Dir')" onmouseleave="hideTooltip()"><rect x="150" y="470" width="70" height="30" rx="5" /></g>
+                                    </svg>
+                                </div>
+                                <div class="w-1/2 bg-white border rounded p-2 text-sm overflow-y-auto max-h-[340px]">
+                                    <h4 class="font-bold text-gray-700 mb-2 border-b pb-1">Anatomia</h4>
+                                    <div id="protocol-checklist" class="space-y-1"></div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Coluna Direita: Cards (Sempre Visível) -->
+                        <div class="w-full md:w-1/2 flex-grow">
+                            <div id="exams-container" class="bg-blue-50 p-4 rounded border border-blue-200 min-h-[400px] max-h-[800px] overflow-y-auto shadow-inner">
+                                <p id="placeholder-text" class="text-center text-gray-500 mt-20 flex flex-col items-center">
+                                    <i class="fas fa-notes-medical text-3xl mb-3 text-blue-300"></i>
+                                    Selecione um módulo acima para começar.
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- TAB: MÍDIA -->
+        <section id="tab-midia" class="tab-content hidden-section">
+            <div class="bg-white rounded-lg shadow p-6 mb-6">
+                <h2 class="text-lg font-bold border-b pb-2 mb-4 text-gray-700"><i class="fas fa-camera mr-2"></i>Galeria</h2>
+                <div class="mb-6">
+                    <label class="block text-sm font-medium text-gray-700 mb-2">Upload de Imagens</label>
+                    <input type="file" id="imageInput" multiple accept="image/*" class="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100" onchange="handleImageUpload(event)"/>
+                </div>
+                <div id="gallery-preview" class="grid grid-cols-2 md:grid-cols-4 gap-4"></div>
+            </div>
+        </section>
+
+        <!-- MODALS -->
+        <div id="storage-modal" class="fixed inset-0 bg-gray-900 bg-opacity-70 hidden items-center justify-center z-50 backdrop-blur-sm">
+            <div class="bg-white rounded-lg shadow-2xl p-6 max-w-lg w-full mx-4 modal-animate">
+                <div class="flex justify-between items-center mb-4 border-b pb-2">
+                    <h3 class="text-xl font-bold text-gray-800"><i class="fas fa-folder-open text-blue-600 mr-2"></i>Avaliações Salvas</h3>
+                    <button onclick="closeStorageModal()" class="text-gray-500 hover:text-gray-800"><i class="fas fa-times"></i></button>
+                </div>
+                <div class="mb-4"><button onclick="saveCurrentSession(true)" class="w-full bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700 font-bold shadow-sm"><i class="fas fa-save mr-2"></i>Salvar Sessão Atual Agora</button></div>
+                <div class="bg-gray-50 border rounded p-2 max-h-60 overflow-y-auto"><ul id="storage-list" class="space-y-2"></ul></div>
+            </div>
+        </div>
+
+        <div id="report-modal" class="fixed inset-0 bg-gray-900 bg-opacity-50 hidden items-center justify-center z-50">
+            <div class="bg-white rounded-lg shadow-xl w-11/12 max-w-4xl max-h-[90vh] overflow-y-auto p-0 flex flex-col">
+                <div class="p-4 border-b flex justify-between items-center bg-gray-50 rounded-t-lg no-print"><h3 class="font-bold text-lg">Pré-visualização do Laudo</h3><button onclick="closeReport()" class="text-gray-500 hover:text-gray-800"><i class="fas fa-times"></i></button></div>
+                <div id="report-content" class="p-8 font-serif text-sm leading-relaxed"></div>
+                <div class="p-4 border-t bg-gray-50 flex justify-end gap-3 rounded-b-lg no-print flex-wrap">
+                    <button onclick="downloadCSV()" class="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700"><i class="fas fa-file-csv mr-2"></i> CSV</button>
+                    <button onclick="downloadJSON()" class="bg-yellow-600 text-white px-4 py-2 rounded hover:bg-yellow-700"><i class="fas fa-file-code mr-2"></i> JSON</button>
+                    <button onclick="copyToClipboard()" class="bg-gray-600 text-white px-4 py-2 rounded hover:bg-gray-700"><i class="fas fa-copy mr-2"></i> Copiar</button>
+                    <button onclick="printReport()" class="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700"><i class="fas fa-print mr-2"></i> Imprimir / PDF</button>
+                </div>
+            </div>
+        </div>
+
+        <div id="custom-confirm-modal" class="fixed inset-0 bg-gray-900 bg-opacity-70 hidden items-center justify-center z-[60] backdrop-blur-sm">
+            <div class="bg-white rounded-lg shadow-2xl p-6 max-w-sm w-full mx-4 modal-animate border-t-4 border-red-500">
+                <div class="text-center mb-4"><div class="bg-red-100 rounded-full w-12 h-12 flex items-center justify-center mx-auto mb-2"><i class="fas fa-exclamation-triangle text-red-600 text-xl"></i></div><h3 class="text-lg font-bold text-gray-800" id="confirm-title">Atenção</h3><p class="text-sm text-gray-600 mt-2 leading-relaxed" id="confirm-message">Mensagem.</p></div>
+                <div class="flex gap-3 justify-center mt-6"><button onclick="handleConfirmResponse(false)" class="flex-1 px-4 py-2 bg-gray-200 text-gray-800 rounded hover:bg-gray-300 text-sm font-medium transition">Apenas Registrar</button><button onclick="handleConfirmResponse(true)" class="flex-1 px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700 text-sm font-bold shadow-lg transition">Sim, Aplicar</button></div>
+            </div>
+        </div>
+    </main>
+
+    <footer class="bg-gray-800 text-white py-8 mt-12 no-print text-center"><p class="text-sm text-gray-400">Desenvolvido por KriterIO - Tecnologia para Perícias. <span class="text-xs text-gray-500 block mt-1">Versão 2.2</span></p></footer>
+
+    <script>
+        // --- 1. GLOBAL VARIABLES ---
+        let tooltip; 
+        const STORAGE_KEY = 'kriterio_saved_sessions_v1';
+        let currentSessionId = 'autosave_default';
+        let autoSaveTimer;
+
+        let waddellScore = 0, waddellConfirmed = false;
+        let mentalScore = 0, mentalConfirmed = false;
+        let pendingConfirmationType = null;
+
+        let activeSpecialProtocols = new Set();
+        let selectedMentalScales = [], selectedMentalSigns = new Set();
+        let painVAS = 0, cardioScore = '', dasiScore = '', ergoRula = '', ergoCouto = '';
+        let mentalBDI = '', mentalBAI = '';
+        let disabilityData = { ifbra: false, ifbram: false, cifB: '', cifS: '', cifD: '', cifE: '', cidCodes: '', consolidationDate: '', priorDamage: 0, damages: [], otherTests: '' };
+        
+        let selectedBodyParts = new Set(), partColors = {}, currentSelectionColor = "#3b82f6";
+        let examResults = {}, customTests = {}, uploadedImages = [];
+
+        // --- 2. UTILS ---
+        function updateGlobalColor(val) { currentSelectionColor = val; }
+        function changeTab(tabId) {
+            document.querySelectorAll('.tab-content').forEach(el => el.classList.add('hidden-section'));
+            document.getElementById('tab-' + tabId).classList.remove('hidden-section');
+            document.querySelectorAll('.nav-btn').forEach(el => { el.classList.remove('tab-active', 'text-blue-600', 'font-bold'); el.classList.add('text-gray-600'); });
+            const btn = document.getElementById('btn-' + tabId);
+            if(btn) { btn.classList.add('tab-active'); btn.classList.remove('text-gray-600'); }
+        }
+        function showTooltip(evt, text) { 
+            if(!tooltip) return;
+            tooltip.innerText = text; tooltip.style.display = 'block'; updateTooltipPosition(evt); 
+        }
+        function hideTooltip() { 
+            if(!tooltip) return;
+            tooltip.style.display = 'none'; 
+        }
+        function updateTooltipPosition(evt) { 
+            if(!tooltip) return;
+            tooltip.style.left = (evt.clientX + 15) + 'px'; tooltip.style.top = (evt.clientY + 15) + 'px'; 
+        }
+        document.addEventListener('mousemove', function(evt) { if(tooltip && tooltip.style.display === 'block') updateTooltipPosition(evt); });
+        function showToast(msg) { const t = document.getElementById('toast'); if(t){ t.innerHTML = `<i class="fas fa-info-circle mr-2"></i> ${msg}`; t.classList.add('show'); setTimeout(() => t.classList.remove('show'), 3000); } }
+        function updateLastSavedTime() { const el = document.getElementById('last-saved-time'); if(el) el.innerText = "Salvo às " + new Date().toLocaleTimeString(); }
+
+        // --- 3. MODAL FUNCTIONS ---
+        function showConfirmationModal(type, title, message) {
+            pendingConfirmationType = type;
+            document.getElementById('confirm-title').innerText = title;
+            document.getElementById('confirm-message').innerText = message;
+            document.getElementById('custom-confirm-modal').classList.remove('hidden');
+            document.getElementById('custom-confirm-modal').classList.add('flex');
+        }
+
+        function hideConfirmationModal() { 
+            document.getElementById('custom-confirm-modal').classList.add('hidden'); 
+            document.getElementById('custom-confirm-modal').classList.remove('flex'); 
+            pendingConfirmationType = null; 
+        }
+
+        function handleConfirmResponse(isConfirmed) {
+            const type = pendingConfirmationType;
+            hideConfirmationModal();
+            if (type === 'waddell') {
+                waddellConfirmed = isConfirmed;
+                document.getElementById('waddell-alert-box').classList.toggle('hidden', !isConfirmed);
+            } else if (type === 'mental') {
+                mentalConfirmed = isConfirmed;
+                document.getElementById('mental-alert-box').classList.toggle('hidden', !isConfirmed);
+            }
+            saveCurrentSession();
+        }
+
+        // --- 4. CONSTANTS ---
+        const waddellSigns = [
+             { id: 'sens', cat: 'Sensibilidade', desc: 'Dor superficial ou não anatômica.' },
+             { id: 'sim', cat: 'Simulação', desc: 'Dor axial/rotação.' },
+             { id: 'dist', cat: 'Distração', desc: 'Diferença ADM distraído.' },
+             { id: 'reg', cat: 'Regional', desc: 'Déficit não anatômico.' },
+             { id: 'super', cat: 'Exagero', desc: 'Desproporcional.' }
+        ];
+
+        const mentalSigns = [
+            { id: 'ap', cat: 'Desleixo' }, { id: 'af', cat: 'Embotamento' }, { id: 'di', cat: 'Discurso Desorganizado' }, { id: 'ho', cat: 'Hostilidade' }, { id: 'ch', cat: 'Choro' }, { id: 'al', cat: 'Alucinação' }
+        ];
+
+        const orthoProtocols = {
+            'cervical': { title: "Cervical", color: "text-blue-800", tests: [{name: "Spurling"}, {name: "Distração"}], measures: ["Flexão", "Extensão", "Rotação D/E"] },
+            'lombar': { title: "Lombar", color: "text-green-800", tests: [{name: "Lasègue"}, {name: "Schober"}], measures: ["Flexão", "Extensão"] },
+            'ombro-e': { title: "Ombro Esq", color: "text-indigo-800", tests: [{name: "Jobe"}, {name: "Neer"}], measures: ["Flexão", "Abdução"] },
+            'ombro-d': { title: "Ombro Dir", color: "text-indigo-800", tests: [{name: "Jobe"}, {name: "Neer"}], measures: ["Flexão", "Abdução"] },
+            'punho-e': { title: "Punho Esq", color: "text-teal-800", tests: [{name: "Phalen"}, {name: "Tinel"}], measures: ["Flexão", "Extensão"] },
+            'punho-d': { title: "Punho Dir", color: "text-teal-800", tests: [{name: "Phalen"}, {name: "Tinel"}], measures: ["Flexão", "Extensão"] },
+            'mao-e': { title: "Mão Esq", color: "text-orange-800", tests: [{name: "Allen"}, {name: "Froment"}], measures: ["Preensão"] },
+            'mao-d': { title: "Mão Dir", color: "text-orange-800", tests: [{name: "Allen"}, {name: "Froment"}], measures: ["Preensão"] },
+            'joelho-e': { title: "Joelho Esq", color: "text-red-800", tests: [{name: "Lachman"}, {name: "McMurray"}], measures: ["Flexão", "Extensão"] },
+            'joelho-d': { title: "Joelho Dir", color: "text-red-800", tests: [{name: "Lachman"}, {name: "McMurray"}], measures: ["Flexão", "Extensão"] },
+            'tornozelo-pe-e': { title: "Pé/Tornoz. Esq", color: "text-indigo-800", tests: [{name: "Gaveta Anterior"}, {name: "Thompson"}, {name: "Mulder"}], measures: ["Estática", "Dinâmica", "Medial", "Lateral", "Anterior"] },
+            'tornozelo-pe-d': { title: "Pé/Tornoz. Dir", color: "text-indigo-800", tests: [{name: "Gaveta Anterior"}, {name: "Thompson"}, {name: "Mulder"}], measures: ["Estática", "Dinâmica", "Medial", "Lateral", "Anterior"] }
+        };
+
+        // --- 5. LOGIC & DATA ---
+        function initWaddell() {
+            const container = document.getElementById('waddell-container');
+            if(!container) return; 
+            container.innerHTML = waddellSigns.map(s => 
+                `<div class="flex items-start gap-3 p-3 bg-gray-50 rounded border hover:bg-gray-100">
+                    <input type="checkbox" id="wad-${s.id}" class="mt-1 h-5 w-5 text-red-600 rounded" onchange="checkWaddell(this)">
+                    <div><label for="wad-${s.id}" class="font-bold text-gray-800 cursor-pointer">${s.cat}</label><p class="text-sm text-gray-600">${s.desc}</p></div>
+                </div>`
+            ).join('');
+        }
+
+        function checkWaddell(checkboxElement) {
+            const checks = document.querySelectorAll('[id^="wad-"]:checked');
+            waddellScore = checks.length;
+            const alertBox = document.getElementById('waddell-alert-box');
+            if (waddellScore >= 3) {
+                if (!waddellConfirmed) showConfirmationModal('waddell', 'Sinais de Waddell', '3+ Sinais identificados. Marcar comportamento não-orgânico?');
+                else alertBox.classList.remove('hidden');
+            } else { waddellConfirmed = false; alertBox.classList.add('hidden'); }
+            saveCurrentSession();
+        }
+
+        function initProtocolList() { 
+            const l=document.getElementById('protocol-checklist'); 
+            if(l){ l.innerHTML=''; for(const [k,v] of Object.entries(orthoProtocols)) l.innerHTML+=`<label class="flex items-center space-x-2 cursor-pointer hover:bg-gray-100 p-1"><input type="checkbox" id="chk-${k}" onchange="toggleBodyPart('${k}',true)" class="rounded h-4 w-4"><span>${v.title}</span></label>`; } 
+        }
+
+        function checkMental(id) { if(selectedMentalSigns.has(id)) selectedMentalSigns.delete(id); else selectedMentalSigns.add(id); mentalScore = selectedMentalSigns.size; if(mentalScore>=3 && !mentalConfirmed) showConfirmationModal('mental','Mental','3+ Sinais. Marcar severo?'); else document.getElementById('mental-alert-box').classList.toggle('hidden', !mentalConfirmed); saveCurrentSession(); }
+        function toggleMentalScale(n) { if(['MBI','CBI','BAT'].includes(n)) { selectedMentalScales = selectedMentalScales.filter(s=>!['MBI','CBI','BAT'].includes(s)); selectedMentalScales.push(n); } else { if(selectedMentalScales.includes(n)) selectedMentalScales=selectedMentalScales.filter(s=>s!==n); else selectedMentalScales.push(n); } saveCurrentSession(); }
+        function updateVAS(v) { painVAS=v; const d=document.getElementById('vas-desc'); const n=document.getElementById('vas-value'); if(d){ n.innerText=v; d.innerText=v==0?"Sem Dor":v<=3?"Leve":v<=7?"Moderada":"Intensa"; } saveCurrentSession(); }
+        function updateCardioData(f,v) { if(f==='score') cardioScore=v; if(f==='dasi') dasiScore=v; saveCurrentSession(); }
+        function updateErgoData(t,v) { if(t==='rula') ergoRula=v; if(t==='couto') ergoCouto=v; renderExamPanel(); saveCurrentSession(); }
+        function updateMentalScore(t,v) { if(t==='bdi') mentalBDI=v; if(t==='bai') mentalBAI=v; renderExamPanel(); saveCurrentSession(); }
+        function updateDisabilityField(f,v) { disabilityData[f]=v; saveCurrentSession(); }
+        function addDamage(s,v=0) { disabilityData.damages.push({system:s, value:v}); renderExamPanel(); saveCurrentSession(); }
+        function removeDamage(i) { disabilityData.damages.splice(i,1); renderExamPanel(); saveCurrentSession(); }
+        function updateDamageValue(i,v) { disabilityData.damages[i].value = parseFloat(v)||0; document.getElementById('balthazard-result').innerText=calculateBalthazard()+'%'; saveCurrentSession(); }
+        function calculateBalthazard() { let r=100, t=0; disabilityData.damages.map(d=>d.value).sort((a,b)=>b-a).forEach(v=>{ let d=(v*r)/100; t+=d; r-=d; }); return t.toFixed(2); }
+        function addCustomTest(pid) { const i=document.getElementById(`custom-test-input-${pid}`); const n=i.value.trim(); if(n){ if(!customTests[pid]) customTests[pid]=[]; customTests[pid].push({name:n, result:''}); i.value=''; renderExamPanel(); saveCurrentSession(); } }
+        function removeCustomTest(pid,i) { customTests[pid].splice(i,1); renderExamPanel(); saveCurrentSession(); }
+        function setCustomTestStatus(pid,i,s) { if(customTests[pid][i].result===s) customTests[pid][i].result=''; else customTests[pid][i].result=s; renderExamPanel(); saveCurrentSession(); }
+        function getRulaIntervention(s) { const sc=parseInt(s); if(!sc)return''; if(sc<=2)return 'Aceitável'; if(sc<=4)return 'Investigar'; if(sc<=6)return 'Mudar Breve'; return 'Mudar Já'; }
+        function getCoutoIntervention(s) { const sc=parseInt(s); if(isNaN(sc))return''; if(sc<=2)return 'Baixa'; if(sc<=5)return 'Média'; if(sc<=9)return 'Alta'; return 'Altíssima'; }
+        function getBeckInterpretation(t,s) { const sc=parseInt(s); if(isNaN(sc))return''; if(t==='bdi') return sc<=13?'Mínima':sc<=19?'Leve':sc<=28?'Moderada':'Grave'; if(t==='bai') return sc<=7?'Mínima':sc<=15?'Leve':sc<=25?'Moderada':'Grave'; return ''; }
+        function toggleOrthopedicSelector() { document.getElementById('lego-selector-area').classList.toggle('hidden'); }
+        function toggleSpecialProtocol(t) { if(activeSpecialProtocols.has(t)) activeSpecialProtocols.delete(t); else activeSpecialProtocols.add(t); renderExamPanel(); saveCurrentSession(); }
+        function toggleBodyPart(partId, fromCheckbox = false) { const el=document.getElementById(partId); const chk=document.getElementById(`chk-${partId}`); if(!el) return; const isSel=selectedBodyParts.has(partId); if(fromCheckbox) { if(!chk.checked && isSel) removePart(partId, el, chk); else if(chk.checked && !isSel) addPart(partId, el, chk); } else { if(isSel) removePart(partId, el, chk); else addPart(partId, el, chk); } renderExamPanel(); saveCurrentSession(); }
+        function addPart(id, el, chk) { selectedBodyParts.add(id); partColors[id] = currentSelectionColor; el.classList.add('selected'); el.style.fill=currentSelectionColor; el.querySelectorAll('*').forEach(c=>c.style.fill=currentSelectionColor); if(chk) chk.checked=true; }
+        function removePart(id, el, chk) { selectedBodyParts.delete(id); delete partColors[id]; delete examResults[id]; el.classList.remove('selected'); el.style.fill=""; el.querySelectorAll('*').forEach(c=>c.style.fill=""); if(chk) chk.checked=false; }
+        function setTestStatus(pid, tn, s) { if(!examResults[pid]) examResults[pid]={}; if(examResults[pid][tn]===s) delete examResults[pid][tn]; else examResults[pid][tn]=s; renderExamPanel(); saveCurrentSession(); }
+        function saveResult(pid, m, v) { if(!examResults[pid]) examResults[pid]={}; examResults[pid][m]=v; saveCurrentSession(); }
+
+        // --- 6. RENDER EXAM PANEL ---
+        function renderExamPanel() {
+            const c = document.getElementById('exams-container'); c.innerHTML = '';
+            if(selectedBodyParts.size===0 && activeSpecialProtocols.size===0) { c.innerHTML=`<p class="text-center text-gray-500 mt-20 flex flex-col items-center"><i class="fas fa-notes-medical text-3xl mb-3 text-blue-300"></i>Selecione um exame.</p>`; return; }
+            if(activeSpecialProtocols.has('ergonomia')) c.innerHTML += `<div class="mb-4 bg-white p-3 rounded shadow border-l-4 border-teal-600"><div class="flex justify-between mb-2"><h3 class="font-bold text-teal-800">Ergonomia</h3><button onclick="toggleSpecialProtocol('ergonomia')"><i class="fas fa-trash text-gray-400"></i></button></div><div class="grid grid-cols-2 gap-2 text-xs"><div><label>RULA</label><input type="number" class="border w-full" value="${ergoRula}" onchange="updateErgoData('rula',this.value)">${getRulaIntervention(ergoRula)}</div><div><label>Couto</label><input type="number" class="border w-full" value="${ergoCouto}" onchange="updateErgoData('couto',this.value)">${getCoutoIntervention(ergoCouto)}</div></div></div>`;
+            if(activeSpecialProtocols.has('incapacidade')) c.innerHTML += `<div class="mb-4 bg-white p-3 rounded shadow border-l-4 border-orange-500"><div class="flex justify-between mb-2"><h3 class="font-bold text-orange-700">Incapacidade</h3><button onclick="toggleSpecialProtocol('incapacidade')"><i class="fas fa-trash text-gray-400"></i></button></div><div class="text-xs space-y-1"><div class="flex gap-2"><label><input type="checkbox" ${disabilityData.ifbra?'checked':''} onchange="updateDisabilityField('ifbra',this.checked)"> IFBr-A</label><label><input type="checkbox" ${disabilityData.ifbram?'checked':''} onchange="updateDisabilityField('ifbram',this.checked)"> IFBr-M</label></div><input type="text" class="border w-full" placeholder="b" value="${disabilityData.cifB}" onchange="updateDisabilityField('cifB',this.value)"><input type="text" class="border w-full" placeholder="s" value="${disabilityData.cifS}" onchange="updateDisabilityField('cifS',this.value)"><input type="text" class="border w-full" placeholder="d" value="${disabilityData.cifD}" onchange="updateDisabilityField('cifD',this.value)"><input type="text" class="border w-full" placeholder="e" value="${disabilityData.cifE}" onchange="updateDisabilityField('cifE',this.value)"><input type="text" class="border w-full" placeholder="CID" value="${disabilityData.cidCodes}" onchange="updateDisabilityField('cidCodes',this.value)"></div></div>`;
+            if(activeSpecialProtocols.has('dano')) { let dl=''; disabilityData.damages.forEach((d,i)=>dl+=`<div class="flex justify-between text-xs mb-1"><span>${d.system}</span><input type="number" class="border w-12" value="${d.value}" onchange="updateDamageValue(${i},this.value)">% <button onclick="removeDamage(${i})">x</button></div>`); c.innerHTML += `<div class="mb-4 bg-white p-3 rounded shadow border-l-4 border-gray-600"><div class="flex justify-between mb-2"><h3 class="font-bold text-gray-800">Dano (Balthazard)</h3><button onclick="toggleSpecialProtocol('dano')"><i class="fas fa-trash text-gray-400"></i></button></div><div class="flex gap-2"><div class="w-1/3 text-center text-xs border rounded cursor-pointer bg-gray-50" onclick="addDamage('Sistema',10)">+ Add</div><div class="w-2/3">${dl}<div class="font-bold text-right border-t">Global: <span id="balthazard-result">${calculateBalthazard()}%</span></div></div></div></div>`; }
+            if(activeSpecialProtocols.has('dor')) { c.innerHTML += `<div class="mb-4 bg-white p-3 rounded shadow border-l-4 border-red-500"><div class="flex justify-between mb-2"><h3 class="font-bold text-red-700">Dor (EVA)</h3><button onclick="toggleSpecialProtocol('dor')"><i class="fas fa-trash text-gray-400"></i></button></div><input type="range" min="0" max="10" value="${painVAS}" class="w-full" oninput="updateVAS(this.value)"><div class="text-center font-bold">${painVAS} <span id="vas-desc" class="text-xs font-normal"></span></div><div class="mt-1 text-xs text-center"><label><input type="checkbox" id="includePainCheck" ${getSessions()[currentSessionId]?.protocols?.painInclude?'checked':''} onchange="saveCurrentSession()"> Laudo</label></div></div>`; setTimeout(()=>updateVAS(painVAS),0); }
+            if(activeSpecialProtocols.has('cardio')) c.innerHTML += `<div class="mb-4 bg-white p-3 rounded shadow border-l-4 border-pink-500"><div class="flex justify-between mb-2"><h3 class="font-bold text-pink-700">Cardio</h3><button onclick="toggleSpecialProtocol('cardio')"><i class="fas fa-trash text-gray-400"></i></button></div><div class="text-xs"><label>Calc. Doença Cardíaca Grave</label><input type="text" class="border w-full mb-1" value="${cardioScore}" oninput="updateCardioData('score',this.value)"><label>Pontuação DASI</label><input type="number" class="border w-full" value="${dasiScore}" oninput="updateCardioData('dasi',this.value)"></div></div>`;
+            if(activeSpecialProtocols.has('mental')) {
+                let signs=''; mentalSigns.forEach(s => signs+=`<label class="block text-xs"><input type="checkbox" ${selectedMentalSigns.has(s.id)?'checked':''} onchange="checkMental('${s.id}')"> ${s.cat}</label>`);
+                let bo = `<div class="mt-2 pt-1 border-t"><label class="block font-bold text-xs">Burnout:</label><div class="flex gap-2"><label><input type="radio" name="burnout" onclick="toggleMentalScale('MBI')" ${selectedMentalScales.includes('MBI')?'checked':''}> MBI</label><label><input type="radio" name="burnout" onclick="toggleMentalScale('CBI')" ${selectedMentalScales.includes('CBI')?'checked':''}> CBI</label><label><input type="radio" name="burnout" onclick="toggleMentalScale('BAT')" ${selectedMentalScales.includes('BAT')?'checked':''}> BAT</label></div></div>`;
+                let pr = `<div class="mt-2 text-xs space-y-1"><label><input type="checkbox" ${selectedMentalScales.includes('Protocolo Kriterio')?'checked':''} onchange="toggleMentalScale('Protocolo Kriterio')"> Protocolo Kriterio</label><label><input type="checkbox" ${selectedMentalScales.includes('COPSOQ-II')?'checked':''} onchange="toggleMentalScale('COPSOQ-II')"> Risco (COPSOQ-II)</label></div>`;
+                let beck = `<div class="mt-2 pt-1 border-t text-xs"><label class="block font-bold text-xs mb-1">Beck:</label><div class="grid grid-cols-2 gap-2"><div><label>BDI-II</label><input type="number" class="border w-full px-1" value="${mentalBDI}" onchange="updateMentalScore('bdi', this.value)"> ${getBeckInterpretation('bdi',mentalBDI)}</div><div><label>BAI</label><input type="number" class="border w-full px-1" value="${mentalBAI}" onchange="updateMentalScore('bai', this.value)"> ${getBeckInterpretation('bai',mentalBAI)}</div></div></div>`;
+                c.innerHTML += `<div class="mb-4 bg-white p-3 rounded shadow border-l-4 border-purple-500"><div class="flex justify-between mb-2"><h3 class="font-bold text-purple-700">Mental</h3><button onclick="toggleSpecialProtocol('mental')"><i class="fas fa-trash text-gray-400"></i></button></div><div class="grid grid-cols-2 gap-1 mb-2">${signs}</div><div id="mental-alert-box" class="${mentalConfirmed?'':'hidden'} text-xs text-red-700 font-bold bg-red-50 p-1 rounded">Alerta Severo</div>${bo}${pr}${beck}</div>`;
+            }
+            selectedBodyParts.forEach(pid => {
+                const p = orthoProtocols[pid];
+                let h = `<div class="mb-4 bg-white p-3 rounded shadow border-l-4 ${p.color.replace('text','border')}"><div class="flex justify-between mb-2"><h3 class="font-bold ${p.color}">${p.title}</h3><button onclick="toggleBodyPart('${pid}', true); document.getElementById('chk-${pid}').checked = false;"><i class="fas fa-trash text-gray-400"></i></button></div><div class="text-xs mb-2"><strong>Medidas:</strong><div class="grid grid-cols-2 gap-1">`;
+                p.measures.forEach(m => h+=`<div><input type="text" class="border w-full px-1" placeholder="${m}" value="${examResults[pid]?.[m]||''}" onchange="saveResult('${pid}','${m}',this.value)"></div>`);
+                h+=`</div></div><div class="text-xs"><strong>Testes:</strong><div class="space-y-1">`;
+                p.tests.forEach(t => {
+                    const r = examResults[pid]?.[t.name];
+                    const cls = r==='Positivo'?'bg-green-500 text-white':(r==='Negativo'?'bg-red-500 text-white':(r==='NaoRealizado'?'bg-gray-500 text-white':'bg-gray-100'));
+                    h+=`<div class="flex justify-between items-center bg-gray-50 p-1 rounded"><span>${t.name}</span><div class="flex gap-1"><button class="px-1 border rounded ${r==='Positivo'?'bg-green-500 text-white':'bg-white'}" onclick="setTestStatus('${pid}','${t.name}','Positivo',this)">+</button><button class="px-1 border rounded ${r==='Negativo'?'bg-red-500 text-white':'bg-white'}" onclick="setTestStatus('${pid}','${t.name}','Negativo',this)">-</button></div></div>`;
+                });
+                if(customTests[pid]) customTests[pid].forEach((ct,i) => h+=`<div class="flex justify-between bg-yellow-50 p-1"><i>${ct.name}</i> <button onclick="removeCustomTest('${pid}',${i})">x</button></div>`);
+                h+=`<div class="mt-1 flex gap-1"><input id="custom-test-input-${pid}" class="border w-full px-1" placeholder="Outro"><button onclick="addCustomTest('${pid}')">+</button></div></div></div>`;
+                c.innerHTML += h;
+            });
+        }
+
+        // --- 7. STORAGE ---
+        function getSessions() { const raw = localStorage.getItem(STORAGE_KEY); return raw ? JSON.parse(raw) : {}; }
+
+        function saveCurrentSession(isManual = false) {
+            const sessions = getSessions();
+            const nome = document.getElementById('nomePericiado').value.trim();
+            const data = document.getElementById('dataAvaliacao').value;
+            const sessionName = nome ? `${nome} (${data || 'Sem Data'})` : `Rascunho ${new Date().toLocaleTimeString()}`;
+            if (isManual) { currentSessionId = 'manual_' + Date.now(); showToast("Avaliação salva!"); }
+            
+            const payload = {
+                id: currentSessionId, name: sessionName, timestamp: Date.now(),
+                inputs: {
+                    nomePericiado: document.getElementById('nomePericiado').value, dataAvaliacao: document.getElementById('dataAvaliacao').value,
+                    medicoPerito: document.getElementById('medicoPerito').value, assistentesTecnicos: document.getElementById('assistentesTecnicos').value,
+                    resumoAnamnese: document.getElementById('resumoAnamnese').value,
+                    checkFita: document.getElementById('checkFita').checked, checkGoniometro: document.getElementById('checkGoniometro').checked,
+                    checkFotos: document.getElementById('checkFotos').checked, checkGravacao: document.getElementById('checkGravacao').checked, checkConsentimento: document.getElementById('checkConsentimento').checked
+                },
+                waddell: { checks: Array.from(document.querySelectorAll('[id^="wad-"]:checked')).map(el => el.id), score: waddellScore, confirmed: waddellConfirmed },
+                protocols: {
+                    activeSpecial: Array.from(activeSpecialProtocols), selectedBodyParts: Array.from(selectedBodyParts),
+                    partColors: partColors, examResults: examResults, customTests: customTests,
+                    painVAS: painVAS, mentalScales: selectedMentalScales, mentalSigns: Array.from(selectedMentalSigns), mentalConfirmed: mentalConfirmed,
+                    cardioScore: cardioScore, dasiScore: dasiScore, ergoRula: ergoRula, ergoCouto: ergoCouto,
+                    mentalBDI: mentalBDI, mentalBAI: mentalBAI, disabilityData: disabilityData,
+                    painInclude: document.getElementById('includePainCheck') ? document.getElementById('includePainCheck').checked : false,
+                    cardioInclude: document.getElementById('includeCardioCheck') ? document.getElementById('includeCardioCheck').checked : false
+                },
+                images: uploadedImages
+            };
+            try { sessions[currentSessionId] = payload; localStorage.setItem(STORAGE_KEY, JSON.stringify(sessions)); updateLastSavedTime(); if(document.getElementById('storage-modal').classList.contains('flex')) renderSessionList(); } 
+            catch(e) { console.error(e); }
+        }
+
+        function loadSession(id) {
+            const sessions = getSessions(); const data = sessions[id]; if (!data) return;
+            currentSessionId = id;
+            for(const [k,v] of Object.entries(data.inputs)) { const el=document.getElementById(k); if(el){ if(el.type==='checkbox') el.checked=v; else el.value=v; } }
+            document.querySelectorAll('[id^="wad-"]').forEach(el => el.checked=false); data.waddell.checks.forEach(i => { const el=document.getElementById(i); if(el) el.checked=true; });
+            waddellScore = data.waddell.score; waddellConfirmed = data.waddell.confirmed;
+            document.getElementById('waddell-alert-box').classList.toggle('hidden', !waddellConfirmed);
+            activeSpecialProtocols = new Set(data.protocols.activeSpecial); selectedBodyParts = new Set(data.protocols.selectedBodyParts);
+            partColors = data.protocols.partColors || {}; examResults = data.protocols.examResults || {}; customTests = data.protocols.customTests || {};
+            painVAS = data.protocols.painVAS || 0; selectedMentalScales = data.protocols.mentalScales || []; selectedMentalSigns = new Set(data.protocols.mentalSigns || []);
+            mentalConfirmed = data.protocols.mentalConfirmed || false; cardioScore = data.protocols.cardioScore || ''; dasiScore = data.protocols.dasiScore || '';
+            ergoRula = data.protocols.ergoRula || ''; ergoCouto = data.protocols.ergoCouto || ''; mentalBDI = data.protocols.mentalBDI || ''; mentalBAI = data.protocols.mentalBAI || '';
+            if(data.protocols.disabilityData) disabilityData = data.protocols.disabilityData; uploadedImages = data.images || [];
+            renderGallery(); document.querySelectorAll('.lego-part').forEach(el => { el.classList.remove('selected'); el.style.fill=""; });
+            selectedBodyParts.forEach(id => { const el=document.getElementById(id); if(el){ el.classList.add('selected'); if(partColors[id]) el.style.fill=partColors[id]; } const chk=document.getElementById(`chk-${id}`); if(chk) chk.checked=true; });
+            renderExamPanel();
+            setTimeout(() => {
+                if (activeSpecialProtocols.has('dor')) { updateVAS(painVAS); const p=document.getElementById('includePainCheck'); if(p) p.checked=data.protocols.painInclude; }
+                if (activeSpecialProtocols.has('mental')) document.getElementById('mental-alert-box').classList.toggle('hidden', !mentalConfirmed);
+                if (activeSpecialProtocols.has('cardio')) { document.getElementById('cardioScoreInput').value = cardioScore; document.getElementById('dasiScoreInput').value = dasiScore; }
+            }, 50);
+            closeStorageModal(); showToast(`Carregado: ${data.name}`);
+        }
+
+        // --- 8. REPORTS & MISC ---
+        function openStorageModal() { renderSessionList(); document.getElementById('storage-modal').classList.remove('hidden'); document.getElementById('storage-modal').classList.add('flex'); }
+        function closeStorageModal() { document.getElementById('storage-modal').classList.add('hidden'); }
+        function renderSessionList() { const l=document.getElementById('storage-list'); const s=getSessions(); l.innerHTML=''; Object.keys(s).sort((a,b)=>s[b].timestamp-s[a].timestamp).forEach(id=>{ l.innerHTML+=`<li class="flex justify-between bg-gray-100 p-2 rounded mb-1"><span onclick="loadSession('${id}')" class="cursor-pointer flex-grow">${s[id].name}</span> <button onclick="deleteSession('${id}')" class="text-red-500">x</button></li>`; }); }
+        function deleteSession(id) { if(!confirm("Excluir?")) return; const sessions = getSessions(); delete sessions[id]; localStorage.setItem(STORAGE_KEY, JSON.stringify(sessions)); renderSessionList(); }
+        function createNewSession() { if(!confirm("Nova sessão?")) return; currentSessionId='autosave_'+Date.now(); window.location.reload(); }
+        function closeReport() { document.getElementById('report-modal').classList.add('hidden'); }
+        function printReport() { window.print(); }
+        function copyToClipboard() { navigator.clipboard.writeText(document.getElementById('report-content').innerText); alert("Copiado!"); }
+        function downloadCSV() { const csv = "Content\n" + document.getElementById('report-content').innerText; const a = document.createElement('a'); a.href = 'data:text/csv;charset=utf-8,' + encodeURI(csv); a.download = 'laudo.csv'; a.click(); }
+        function downloadJSON() { const d = getSessions()[currentSessionId]; const a = document.createElement('a'); a.href = 'data:text/json;charset=utf-8,' + encodeURIComponent(JSON.stringify(d)); a.download = 'laudo.json'; a.click(); }
+        function handleImageUpload(e) { Array.from(e.target.files).forEach(f=>{ const r=new FileReader(); r.onload=ev=>{ uploadedImages.push({data:ev.target.result, name:f.name}); document.getElementById('gallery-preview').innerHTML+=`<img src="${ev.target.result}" class="h-20 border">`; saveCurrentSession(); }; r.readAsDataURL(f); }); }
+        function generateReport() {
+            const n = document.getElementById('nomePericiado').value;
+            let h = `<h1>Laudo KriterIO v2.2</h1><p><strong>Periciado:</strong> ${n}</p><p><strong>Resumo:</strong> ${document.getElementById('resumoAnamnese').value}</p>`;
+            if(activeSpecialProtocols.has('incapacidade')) h+=`<h3>Incapacidade (CIF)</h3><p>CIF: b:${disabilityData.cifB}, s:${disabilityData.cifS}, d:${disabilityData.cifD}, e:${disabilityData.cifE}</p>`;
+            if(activeSpecialProtocols.has('dano')) h+=`<h3>Dano Corporal</h3><p>Balthazard: ${calculateBalthazard()}%</p>`;
+            if(activeSpecialProtocols.has('ergonomia')) h+=`<h3>Ergonomia</h3><p>RULA: ${ergoRula}, Couto: ${ergoCouto}</p>`;
+            if(activeSpecialProtocols.has('dor')) h+=`<h3>Dor</h3><p>EVA: ${painVAS}</p>`;
+            if(activeSpecialProtocols.has('cardio')) h+=`<h3>Cardiologia</h3><p>Doença Grave: ${cardioScore}, DASI: ${dasiScore}</p>`;
+            if(activeSpecialProtocols.has('mental')) {
+                h+=`<h3>Mental</h3><p>Sinais: ${Array.from(selectedMentalSigns).join(',')}</p><p>Protocolos: ${selectedMentalScales.join(', ')}</p>`;
+                if(mentalBDI) h+=`<p>BDI-II: ${mentalBDI} (${getBeckInterpretation('bdi', mentalBDI).replace(/<[^>]*>/g,'')})</p>`;
+                if(mentalBAI) h+=`<p>BAI: ${mentalBAI} (${getBeckInterpretation('bai', mentalBAI).replace(/<[^>]*>/g,'')})</p>`;
+            }
+            if(selectedBodyParts.size>0) { h+=`<h3>Exame Físico</h3>`; selectedBodyParts.forEach(pid=>{ h+=`<p><strong>${orthoProtocols[pid].title}:</strong> `; Object.entries(examResults[pid]||{}).forEach(([k,v])=>h+=`${k}:${v}; `); h+=`</p>`; }); }
+            document.getElementById('report-content').innerHTML = h;
+            document.getElementById('report-modal').classList.remove('hidden'); document.getElementById('report-modal').classList.add('flex');
+        }
+
+        // --- 9. BOOT & EVENT BINDING ---
+        function setupAutoSave() {
+            document.addEventListener('input', (e) => { if(e.target.classList.contains('save-trigger') || e.target.tagName==='INPUT' || e.target.tagName==='TEXTAREA') { clearTimeout(autoSaveTimer); autoSaveTimer = setTimeout(() => saveCurrentSession(false), 2000); } });
+            document.addEventListener('change', () => saveCurrentSession(false));
+            const s = getSessions(); if(s['autosave_default']) loadSession('autosave_default');
+        }
+
+        document.addEventListener('DOMContentLoaded', () => {
+            tooltip = document.getElementById('custom-tooltip'); 
+            
+            if (typeof initWaddell === 'function') initWaddell();
+            if (typeof initProtocolList === 'function') initProtocolList();
+            if (typeof setupAutoSave === 'function') setupAutoSave();
+            
+            // Explicitly expose globals for onclick events
+            window.showConfirmationModal = showConfirmationModal;
+            window.hideConfirmationModal = hideConfirmationModal;
+            window.handleConfirmResponse = handleConfirmResponse;
+            window.toggleOrthopedicSelector = toggleOrthopedicSelector;
+            window.toggleSpecialProtocol = toggleSpecialProtocol;
+            window.changeTab = changeTab;
+            window.openStorageModal = openStorageModal;
+            window.closeStorageModal = closeStorageModal;
+            window.createNewSession = createNewSession;
+            window.generateReport = generateReport;
+            window.closeReport = closeReport;
+            window.printReport = printReport;
+            window.copyToClipboard = copyToClipboard;
+            window.downloadCSV = downloadCSV;
+            window.downloadJSON = downloadJSON;
+            window.updateGlobalColor = updateGlobalColor;
+            window.toggleBodyPart = toggleBodyPart;
+            window.showTooltip = showTooltip;
+            window.hideTooltip = hideTooltip;
+            window.checkWaddell = checkWaddell;
+            window.toggleMentalScale = toggleMentalScale;
+            window.updateMentalScore = updateMentalScore;
+            window.updateErgoData = updateErgoData;
+            window.updateDisabilityField = updateDisabilityField;
+            window.updateDamageValue = updateDamageValue;
+            window.removeDamage = removeDamage;
+            window.addDamage = addDamage;
+            window.updateCardioData = updateCardioData;
+            window.updateVAS = updateVAS;
+            window.saveResult = saveResult;
+            window.setTestStatus = setTestStatus;
+            window.addCustomTest = addCustomTest;
+            window.removeCustomTest = removeCustomTest;
+            window.setCustomTestStatus = setCustomTestStatus;
+            window.handleImageUpload = handleImageUpload;
+            window.checkMental = checkMental;
+            window.loadSession = loadSession;
+            window.deleteSession = deleteSession;
+            window.saveCurrentSession = saveCurrentSession;
+        });
+
+    </script>
+</body>
+</html>
